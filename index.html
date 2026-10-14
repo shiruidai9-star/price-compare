@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>商品比价助手</title>
+<style>
+/* ===== 基础样式：移动端优先，蓝色主色 ===== */
+:root{--blue:#1677ff;--green:#16a34a;--red:#dc2626;--bg:#f3f6fb;--line:#e3e8f0;--txt:#1f2937;--sub:#6b7280}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--txt);font-size:17px;line-height:1.5}
+header{background:var(--blue);color:#fff;padding:14px 16px;position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between}
+header h1{margin:0;font-size:20px}
+nav button{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:10px;padding:9px 13px;font-size:16px;margin-left:6px}
+nav button.on{background:#fff;color:var(--blue);font-weight:600}
+main{max-width:760px;margin:0 auto;padding:14px}
+.card{background:#fff;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+h2{font-size:18px;margin:0 0 10px}
+textarea,input,select{width:100%;font-size:17px;padding:12px;border:1px solid #cfd8e3;border-radius:12px;background:#fff;color:var(--txt);font-family:inherit}
+textarea{min-height:84px;resize:vertical}
+.btn{display:inline-block;border:0;border-radius:12px;padding:13px 16px;font-size:17px;background:var(--blue);color:#fff;font-weight:600;cursor:pointer;text-align:center}
+.btn.big{width:100%;padding:15px;font-size:19px;margin-top:10px}
+.btn.ghost{background:#eaf2ff;color:var(--blue)}
+.btn.gray{background:#eef0f3;color:#374151}
+.btn.danger{background:#fde8e8;color:var(--red)}
+.btn.sm{padding:8px 12px;font-size:15px}
+.hint{color:var(--sub);font-size:14px;margin:6px 0}
+.plats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:700px){.plats{grid-template-columns:repeat(4,1fr)}}
+.plats .btn{padding:14px 6px}
+.note{background:#fff8e6;border-radius:12px;padding:10px 12px;font-size:14px;color:#7a5600;margin-top:10px}
+/* 价格记录：每个平台一张小卡片 */
+.row{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+.row.low{border:2px solid var(--green);background:#f0fdf4}
+.row.off{opacity:.45;background:#f5f5f5}
+.row .top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.row .name{font-weight:700;font-size:18px}
+.price{font-size:22px;font-weight:700}
+.low .price{color:var(--green)}
+.tag{display:inline-block;font-size:13px;border-radius:8px;padding:2px 8px;margin-left:6px}
+.tag.g{background:var(--green);color:#fff}.tag.r{background:var(--red);color:#fff}.tag.h{background:#9ca3af;color:#fff}
+.warn{color:var(--red);font-size:14px;font-weight:600;margin-top:6px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.grid label{font-size:13px;color:var(--sub)}
+.grid .full{grid-column:1/-1}
+.chk{display:flex;align-items:center;gap:8px;font-size:15px}
+.chk input{width:24px;height:24px}
+.acts{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.acts .btn{flex:1}
+.item{border-bottom:1px solid var(--line);padding:12px 0}
+.item:last-child{border:0}
+.toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:rgba(0,0,0,.8);color:#fff;padding:10px 18px;border-radius:20px;font-size:15px;display:none;z-index:20}
+footer{text-align:center;font-size:12px;color:var(--sub);padding:18px 12px 30px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header><h1>商品比价助手</h1>
+<nav><button id="navHome" class="on" onclick="show('home')">比价</button><button id="navMine" onclick="show('mine')">我的商品</button></nav></header>
+
+<main>
+<!-- ===== 首页：输入商品 ===== -->
+<section id="home">
+  <div class="card">
+    <h2>① 输入商品名，或粘贴分享链接</h2>
+    <textarea id="raw" placeholder="例如：iPhone 16 128G&#10;也可以粘贴淘宝/京东/拼多多复制的分享文字"></textarea>
+    <button class="btn big" id="goBtn" onclick="doSearch()">搜索</button>
+  </div>
+
+  <div id="result" class="hide">
+    <div class="card">
+      <h2>② 搜索关键词（可修改）</h2>
+      <input id="kw" oninput="state.kw=this.value.trim()">
+      <p class="hint">关键词越准确（品牌+型号+规格），搜到的同款越准。</p>
+      <h2 style="margin-top:14px">③ 去各平台搜索</h2>
+      <div class="plats" id="plats"></div>
+      <button class="btn big ghost" onclick="openAll()">一键全部打开</button>
+      <div class="note">
+        <b>一键全部打开没反应？</b>浏览器可能拦截了弹出窗口：<br>
+        · 苹果 Safari：打开「设置」→「Safari浏览器」→ 关闭「阻止弹出式窗口」<br>
+        · 安卓/电脑 Chrome：点地址栏右侧的拦截图标 → 选「始终允许」<br>
+        · 抖音、小红书网页版可能要求登录，打不开时点「复制」后到 App 里粘贴搜索。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>④ 记录各平台价格</h2>
+      <p class="hint">到手价 = 标价 − 优惠抵扣 + 运费（自动计算、自动排序）</p>
+      <div id="rows"></div>
+      <div class="acts">
+        <button class="btn" id="saveBtn" onclick="saveRecord()">保存本次记录</button>
+        <button class="btn ghost" onclick="copyResult()">复制比价结果</button>
+      </div>
+      <p class="hint" id="saveInfo"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 我的商品 ===== -->
+<section id="mine" class="hide">
+  <div class="card"><h2>我的商品</h2><div id="mineList"></div></div>
+  <div class="card hide" id="detail"></div>
+  <div class="card">
+    <h2>备份</h2>
+    <p class="hint">记录只保存在这台设备的浏览器里。换设备前先导出备份，在新设备上导入。</p>
+    <div class="acts">
+      <button class="btn gray" onclick="exportData()">导出备份</button>
+      <button class="btn gray" onclick="document.getElementById('imp').click()">导入备份</button>
+    </div>
+    <input type="file" id="imp" accept=".json,application/json" class="hide" onchange="importData(this)">
+  </div>
+</section>
+</main>
+
+<footer>价格由用户手动记录，仅供参考，请以平台实际页面为准。</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   一、平台列表：只用各平台公开的搜索网址（已逐个核实）
+   本应用不抓取任何网站数据，只是帮你打开搜索页。
+   ========================================================= */
+var PLATS = [
+  {id:'jd',   name:'京东',     url:function(k){return 'https://search.jd.com/Search?keyword='+encodeURIComponent(k)+'&enc=utf-8';}},
+  {id:'tb',   name:'淘宝',     url:function(k){return 'https://s.taobao.com/search?q='+encodeURIComponent(k);}},
+  {id:'tm',   name:'天猫',     url:function(k){return 'https://list.tmall.com/search_product.htm?q='+encodeURIComponent(k);}},
+  {id:'pdd',  name:'拼多多',   url:function(k){return 'https://mobile.yangkeduo.com/search_result.html?search_key='+encodeURIComponent(k);}},
+  {id:'dy',   name:'抖音',     url:function(k){return 'https://www.douyin.com/search/'+encodeURIComponent(k);}, app:true},
+  {id:'vip',  name:'唯品会',   url:function(k){return 'https://category.vip.com/suggest.php?keyword='+encodeURIComponent(k);}},
+  {id:'sn',   name:'苏宁易购', url:function(k){return 'https://search.suning.com/'+encodeURIComponent(k)+'/';}},
+  {id:'xhs',  name:'小红书',   url:function(k){return 'https://www.xiaohongshu.com/search_result?keyword='+encodeURIComponent(k);}, app:true}
+];
+var SHOPS = ['官方旗舰店','自营','普通店'];
+
+/* 当前页面状态：关键词 + 每个平台的一行价格 */
+var state = {kw:'', pid:null, rid:null, rows:{}};
+
+/* =========================================================
+   二、从分享文字里提取商品名
+   例：「【淘宝】https://m.tb.cn/xxx 「Apple iPhone 16 128G」点击链接…」
+   ========================================================= */
+function extractName(t){
+  t = (t||'').trim();
+  if(!t) return '';
+  // 1) 优先取 「」或【】里的内容（排除"淘宝""京东"这类平台名）
+  var m, best='';
+  var re = /[「【\[]([^」】\]]{2,80})[」】\]]/g;
+  while((m = re.exec(t))){
+    var s = m[1].trim();
+    if(/^(淘宝|天猫|京东|拼多多|抖音|唯品会|苏宁|小红书|闲鱼|手机淘宝|淘口令)$/.test(s)) continue;
+    if(s.length > best.length) best = s;
+  }
+  if(best) t = best;
+  // 2) 去掉网址、淘口令(如 ￥AbC123￥ / $xx$ / (xx) )、表情符号和常见提示语
+  t = t.replace(/https?:\/\/\S+/gi,' ')
+       .replace(/[￥$€₤][A-Za-z0-9]{6,}[￥$€₤]?/g,' ')
+       .replace(/\b[A-Za-z0-9]{3,}:\/\/\S*/g,' ')
+       .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu,' ')
+       .replace(/(复制|打开|点击链接|手机淘宝|淘宝|京东|拼多多|抖音|\bApp\b|\bAPP\b|【|】|「|」|直接打开|查看|商品详情|即可|这段话|这条信息|整段|长按|分享|快来|看看|我在|发现了一个|不错哦|好物)/g,' ')
+       .replace(/[，。！？、,!?:：；;]+/g,' ')
+       .replace(/\s+/g,' ').trim();
+  return t.slice(0,60);
+}
+
+/* =========================================================
+   三、到手价计算 + 排序 + 异常提示
+   ========================================================= */
+function num(v){ var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function finalPrice(r){ return Math.round((num(r.price) - num(r.discount) + num(r.ship))*100)/100; }
+function median(a){ if(!a.length) return 0; a=a.slice().sort(function(x,y){return x-y}); var h=Math.floor(a.length/2); return a.length%2?a[h]:(a[h-1]+a[h])/2; }
+
+/* 计算比较结果：返回所有平台行（已排序）和每行标签 */
+function analyze(rows){
+  var list = PLATS.map(function(p){
+    var r = rows[p.id] || {};
+    return {p:p, r:r, has: r.price!==undefined && r.price!=='' , fp: finalPrice(r), same: r.same!==false};
+  });
+  var valid = list.filter(function(x){return x.has && x.same;});
+  valid.sort(function(a,b){return a.fp-b.fp;});
+  valid.forEach(function(x,i){
+    x.low = (i===0);
+    // 与"其他平台"的中位价比较，低 30% 以上就警示
+    var others = valid.filter(function(o){return o!==x;}).map(function(o){return o.fp;});
+    x.warn = others.length>0 && x.fp < median(others)*0.7;
+  });
+  var rest = list.filter(function(x){return !(x.has && x.same);});
+  rest.sort(function(a,b){return (b.has?1:0)-(a.has?1:0);}); // 填了但规格不一致的排在空行前面
+  return {valid:valid, all: valid.concat(rest)};
+}
+
+/* =========================================================
+   四、页面渲染
+   ========================================================= */
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function toast(msg){var t=$('toast');t.textContent=msg;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(function(){t.style.display='none';},2000);}
+
+function doSearch(){
+  var name = extractName($('raw').value);
+  if(!name){ toast('请先输入商品名或粘贴分享文字'); return; }
+  state = {kw:name, pid:null, rid:null, rows:{}};
+  $('kw').value = name;
+  $('saveInfo').textContent = '';
+  renderPlats(); renderRows();
+  $('result').classList.remove('hide');
+  $('kw').scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function renderPlats(){
+  $('plats').innerHTML = PLATS.map(function(p){
+    return '<button class="btn" data-plat="'+p.id+'" onclick="openPlat(\''+p.id+'\')">'+p.name+'</button>';
+  }).join('') + '<button class="btn gray" onclick="copyText(state.kw,\'关键词已复制，可到 App 里粘贴搜索\')">复制关键词</button>';
+}
+function plat(id){ return PLATS.filter(function(p){return p.id===id;})[0]; }
+function openPlat(id){ if(!state.kw){toast('关键词为空');return;} window.open(plat(id).url(state.kw),'_blank'); }
+function openAll(){
+  if(!state.kw){toast('关键词为空');return;}
+  var blocked=0;
+  PLATS.forEach(function(p){ var w=window.open(p.url(state.kw),'_blank'); if(!w) blocked++; });
+  if(blocked) toast('有 '+blocked+' 个页面被浏览器拦截，请看下方说明');
+}
+
+/* 价格记录区：每个平台一张卡片，已排序 */
+function renderRows(){
+  var res = analyze(state.rows);
+  $('rows').innerHTML = res.all.map(function(x){
+    var p=x.p, r=x.r, cls='row'+(x.low?' low':'')+(x.has&&!x.same?' off':'');
+    var tags = (x.low?'<span class="tag g">当前最低</span>':'') + (x.has&&!x.same?'<span class="tag h">规格不一致，不参与比价</span>':'');
+    return '<div class="'+cls+'" data-row="'+p.id+'">'+
+      '<div class="top"><span class="name">'+p.name+tags+'</span>'+
+      '<span class="price">'+(x.has?'¥'+x.fp.toFixed(2):'—')+'</span></div>'+
+      (x.warn?'<div class="warn">⚠ 价格异常偏低，注意假货或定金陷阱</div>':'')+
+      '<div class="grid">'+
+      field(p.id,'price','标价',r.price)+field(p.id,'discount','优惠抵扣',r.discount)+field(p.id,'ship','运费',r.ship)+
+      '<div><label>店铺类型</label><select data-f="shop" data-p="'+p.id+'">'+SHOPS.map(function(s){return '<option'+(r.shop===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div>'+
+      '<div class="full"><label>备注</label><input data-f="note" data-p="'+p.id+'" value="'+esc(r.note)+'" placeholder="如：需会员、需领券、国补"></div>'+
+      '<label class="chk full"><input type="checkbox" data-f="same" data-p="'+p.id+'"'+(r.same===false?'':' checked')+'> 规格一致（容量/尺码/版本相同）</label>'+
+      '</div><div class="acts"><button class="btn sm ghost" onclick="openPlat(\''+p.id+'\')">去购买</button></div></div>';
+  }).join('');
+}
+function field(pid,f,label,v){
+  return '<div><label>'+label+'（元）</label><input type="number" inputmode="decimal" min="0" step="0.01" data-f="'+f+'" data-p="'+pid+'" value="'+esc(v)+'"></div>';
+}
+
+/* 输入时实时计算：只更新数字，离开输入框（change）后再重新排序，避免输入时卡片跳动 */
+document.addEventListener('input', function(e){
+  var el=e.target, pid=el.getAttribute('data-p'); if(!pid) return;
+  var r = state.rows[pid] || (state.rows[pid]={shop:'官方旗舰店', same:true});
+  var f = el.getAttribute('data-f');
+  r[f] = (f==='same') ? el.checked : el.value;
+  if(f==='shop' && !r.shop) r.shop='官方旗舰店';
+  var card = el.closest('.row');
+  var has = r.price!==undefined && r.price!=='';
+  card.querySelector('.price').textContent = has ? '¥'+finalPrice(r).toFixed(2) : '—';
+});
+document.addEventListener('change', function(e){
+  var el=e.target; if(!el.getAttribute('data-p')) return;
+  var r = state.rows[el.getAttribute('data-p')];
+  if(r && !r.shop) r.shop='官方旗舰店';
+  renderRows();
+});
+
+/* =========================================================
+   五、复制比价结果（给微信等使用）
+   ========================================================= */
+function resultText(kw, rows, date){
+  var res = analyze(rows);
+  if(!res.valid.length) return '';
+  var lines = ['【比价结果】'+kw+(date?'（'+date+'）':'')];
+  res.valid.forEach(function(x,i){
+    lines.push((i+1)+'. '+x.p.name+'  到手价 ¥'+x.fp.toFixed(2)+'  '+(x.r.shop||'官方旗舰店')+(x.low?'  ← 当前最低':'')+(x.warn?'  ⚠价格异常偏低':''));
+  });
+  lines.push('价格由用户手动记录，仅供参考，请以平台实际页面为准。');
+  return lines.join('\n');
+}
+function copyResult(){
+  var t = resultText(state.kw, state.rows);
+  if(!t){ toast('请先填写至少一个平台的标价'); return; }
+  copyText(t,'比价结果已复制，可以粘贴到微信');
+}
+function copyText(t,msg){
+  function fallback(){
+    var ta=document.createElement('textarea'); ta.value=t; ta.setAttribute('readonly','');
+    ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0,t.length);
+    var ok=false; try{ok=document.execCommand('copy');}catch(e){}
+    document.body.removeChild(ta);
+    toast(ok?msg:'复制失败，请手动长按选择复制');
+  }
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(t).then(function(){toast(msg);}, fallback);
+  } else fallback();
+}
+
+/* =========================================================
+   六、数据保存：优先用浏览器自带数据库 IndexedDB，
+   不支持时退回 localStorage。整份数据存成一个对象：
+   { products: [ {id, name, records:[{id, date, rows}]} ] }
+   ========================================================= */
+var DB_NAME='priceCompare', KEY='data', idb=null, data={products:[]};
+function openDB(){
+  return new Promise(function(res){
+    try{
+      var rq = indexedDB.open(DB_NAME,1);
+      rq.onupgradeneeded=function(){ rq.result.createObjectStore('kv'); };
+      rq.onsuccess=function(){ idb=rq.result; res(); };
+      rq.onerror=function(){ idb=null; res(); };
+    }catch(e){ idb=null; res(); }
+  });
+}
+function load(){
+  return new Promise(function(res){
+    if(idb){
+      var rq = idb.transaction('kv').objectStore('kv').get(KEY);
+      rq.onsuccess=function(){ pick(rq.result); res(); };
+      rq.onerror=function(){ res(); };
+    } else { pick(null); res(); }
+  }).then(function(){ if(!$('mine').classList.contains('hide')) renderMine(); });
+}
+/* 两处都有数据时，取保存时间更新的那份 */
+function pick(d){
+  var ls=null; try{ ls=JSON.parse(localStorage.getItem(DB_NAME)); }catch(e){}
+  var best=d||null;
+  if(ls && (!best || (ls.ts||0)>(best.ts||0))) best=ls;
+  if(best && Array.isArray(best.products)) data=best;
+}
+function persist(){
+  data.ts = Date.now();
+  // 同时写一份到 localStorage 作为备用（写入是立即完成的）
+  try{ localStorage.setItem(DB_NAME, JSON.stringify(data)); }catch(e){}
+  var copy = JSON.parse(JSON.stringify(data));
+  if(idb){ try{ idb.transaction('kv','readwrite').objectStore('kv').put(copy,KEY); }catch(e){} }
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function today(){ var d=new Date(); function z(n){return (n<10?'0':'')+n;} return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+' '+z(d.getHours())+':'+z(d.getMinutes()); }
+
+/* 保存本次记录：同名商品归到一起；如果正在修改旧记录，就覆盖那条 */
+function saveRecord(){
+  var kw = state.kw.trim();
+  if(!kw){ toast('关键词为空'); return; }
+  if(!analyze(state.rows).valid.length && !Object.keys(state.rows).some(function(k){return state.rows[k].price;})){ toast('请先填写至少一个平台的标价'); return; }
+  var p = state.pid ? findP(state.pid) : null;
+  if(!p) p = data.products.filter(function(x){return x.name===kw;})[0];
+  if(!p){ p={id:uid(), name:kw, records:[]}; data.products.unshift(p); }
+  p.name = kw;
+  var rows = JSON.parse(JSON.stringify(state.rows));
+  var rec = state.rid ? p.records.filter(function(r){return r.id===state.rid;})[0] : null;
+  if(rec){ rec.rows = rows; }
+  else { rec={id:uid(), date:today(), rows:rows}; p.records.unshift(rec); }
+  state.pid=p.id; state.rid=rec.id;
+  persist();
+  $('saveInfo').textContent='已保存（'+rec.date+'），可在「我的商品」查看。再改价格后点保存会更新这条记录。';
+  toast('已保存');
+}
+function findP(id){ return data.products.filter(function(x){return x.id===id;})[0]; }
+
+/* 某个商品的历史最低到手价 */
+function historyLow(p){
+  var best=null;
+  p.records.forEach(function(rec){
+    analyze(rec.rows).valid.forEach(function(x){
+      if(!best || x.fp<best.fp) best={fp:x.fp, date:rec.date, plat:x.p.name};
+    });
+  });
+  return best;
+}
+
+/* =========================================================
+   七、"我的商品"页面
+   ========================================================= */
+function show(page){
+  $('home').classList.toggle('hide', page!=='home');
+  $('mine').classList.toggle('hide', page!=='mine');
+  $('navHome').classList.toggle('on', page==='home');
+  $('navMine').classList.toggle('on', page==='mine');
+  if(page==='mine'){ renderMine(); $('detail').classList.add('hide'); }
+  window.scrollTo(0,0);
+}
+function renderMine(){
+  if(!data.products.length){ $('mineList').innerHTML='<p class="hint">还没有记录。先去「比价」页搜索商品、填写价格并保存。</p>'; return; }
+  $('mineList').innerHTML = data.products.map(function(p){
+    var b = historyLow(p);
+    return '<div class="item" data-prod="'+p.id+'"><div class="name" style="font-weight:700">'+esc(p.name)+'</div>'+
+      '<div class="hint">'+(b?'历史最低到手价 <b style="color:var(--green)">¥'+b.fp.toFixed(2)+'</b>（'+b.plat+'，'+b.date+'）':'暂无有效价格')+' · 共 '+p.records.length+' 次记录</div>'+
+      '<div class="acts"><button class="btn sm ghost" onclick="showDetail(\''+p.id+'\')">查看记录</button>'+
+      '<button class="btn sm danger" onclick="delProduct(\''+p.id+'\')">删除商品</button></div></div>';
+  }).join('');
+}
+function showDetail(pid){
+  var p=findP(pid); if(!p) return;
+  var d=$('detail'); d.classList.remove('hide');
+  d.innerHTML = '<h2>'+esc(p.name)+' 的记录</h2>' + (p.records.length? p.records.map(function(rec){
+    var res=analyze(rec.rows);
+    return '<div class="item" data-rec="'+rec.id+'"><b>'+rec.date+'</b>'+
+      (res.valid.length? res.valid.map(function(x){return '<div>'+x.p.name+'：¥'+x.fp.toFixed(2)+'（'+(x.r.shop||'')+'）'+(x.low?'<span class="tag g">最低</span>':'')+(x.warn?'<span class="tag r">异常低</span>':'')+(x.r.note?' <span class="hint">'+esc(x.r.note)+'</span>':'')+'</div>';}).join('') : '<div class="hint">无有效价格</div>')+
+      '<div class="acts"><button class="btn sm ghost" onclick="editRecord(\''+pid+'\',\''+rec.id+'\')">修改</button>'+
+      '<button class="btn sm gray" onclick="copyText(resultText(findP(\''+pid+'\').name,findRec(\''+pid+'\',\''+rec.id+'\').rows,\''+rec.date+'\'),\'已复制\')">复制</button>'+
+      '<button class="btn sm danger" onclick="delRecord(\''+pid+'\',\''+rec.id+'\')">删除</button></div></div>';
+  }).join('') : '<p class="hint">没有记录了</p>');
+  d.scrollIntoView({behavior:'smooth'});
+}
+function findRec(pid,rid){ return findP(pid).records.filter(function(r){return r.id===rid;})[0]; }
+/* 修改：把旧记录载入比价页，改完点保存会覆盖原记录 */
+function editRecord(pid,rid){
+  var p=findP(pid), rec=findRec(pid,rid);
+  state={kw:p.name, pid:pid, rid:rid, rows:JSON.parse(JSON.stringify(rec.rows))};
+  $('raw').value=p.name; $('kw').value=p.name;
+  renderPlats(); renderRows(); $('result').classList.remove('hide');
+  show('home');
+  $('saveInfo').textContent='正在修改 '+rec.date+' 的记录，改完点「保存本次记录」。';
+}
+function delRecord(pid,rid){
+  if(!confirm('确定删除这条记录吗？')) return;
+  var p=findP(pid); p.records=p.records.filter(function(r){return r.id!==rid;});
+  if(state.rid===rid){state.rid=null;}
+  persist(); renderMine(); showDetail(pid); toast('已删除');
+}
+function delProduct(pid){
+  if(!confirm('确定删除这个商品和它的全部记录吗？')) return;
+  data.products=data.products.filter(function(p){return p.id!==pid;});
+  if(state.pid===pid){state.pid=null;state.rid=null;}
+  persist(); renderMine(); $('detail').classList.add('hide'); toast('已删除');
+}
+
+/* 导出 / 导入备份（JSON 文件） */
+function exportData(){
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='比价备份-'+today().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); a.remove();
+  toast('备份文件已下载');
+}
+function importData(inp){
+  var f=inp.files[0]; if(!f) return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var d=JSON.parse(rd.result);
+      if(!d || !Array.isArray(d.products)) throw 0;
+      // 合并：同 id 的商品跳过，避免重复
+      d.products.forEach(function(p){ if(!findP(p.id)) data.products.push(p); });
+      persist(); renderMine(); toast('导入成功');
+    }catch(e){ toast('文件格式不对，导入失败'); }
+    inp.value='';
+  };
+  rd.readAsText(f);
+}
+
+/* 回车直接搜索 */
+$('raw').addEventListener('keydown',function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); doSearch(); } });
+
+/* 启动：打开数据库并读取已保存的数据 */
+openDB().then(load);
+</script>
+</body>
+</html>
